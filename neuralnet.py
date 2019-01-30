@@ -18,6 +18,9 @@ def softmax(x):
   """
   Write the code for softmax activation function that takes in a numpy array and returns a numpy array.
   """
+  out_exp = np.exp(x)
+  sum_out_exp = np.exp(x).sum(axis=1)  
+  output = out_exp/sum_out_exp[:,None]  
   return output
 
 def sigmoid(x):
@@ -182,9 +185,7 @@ class Neuralnetwork():
       out = layer.forward_pass(out)
       
     # Softmax
-    out_exp = np.exp(out)
-    sum_out_exp = np.exp(out).sum(axis=1)        
-    self.y = out_exp/sum_out_exp[:,None]
+    self.y = softmax(out)
         
     # Cross-entropy loss
     if targets is not None:
