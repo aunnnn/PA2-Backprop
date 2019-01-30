@@ -5,7 +5,7 @@ from tqdm import tqdm_notebook as tqdm
 config = {}
 config['layer_specs'] = [784, 100, 100, 10]  # The length of list denotes number of hidden layers; each element denotes number of neurons in that layer; first element is the size of input layer, last element is the size of output layer.
 config['activation'] = 'sigmoid' # Takes values 'sigmoid', 'tanh' or 'ReLU'; denotes activation function for hidden layers
-config['batch_size'] = 500  # Number of training samples per batch to be passed to network
+config['batch_size'] = 200  # Number of training samples per batch to be passed to network
 config['epochs'] = 50  # Number of epochs to train the model
 config['early_stop'] = True  # Implement early stopping or not
 config['early_stop_epoch'] = 5  # Number of epochs for which validation loss increases to be counted as overfitting
@@ -146,7 +146,7 @@ class Layer():
     self.d_w = (np.swapaxes(self.x.T[:,:,np.newaxis],1,2) * np.swapaxes(delta[:,:,np.newaxis], 0, 2)).sum(axis=2)
 
     # This is dE/db = delta received . 1
-    self.d_b = delta
+    self.d_b = delta.sum(axis=0)
                 
     # This is delta to be passed to previous layer
     self.d_x = delta @ self.w.T
@@ -236,11 +236,10 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
       for l in model.layers:
         if type(l) is Layer:
           l.w += LEARNING_RATE * l.d_w
+          l.b += LEARNING_RATE * l.d_b
       
-
     print('Epoch:', i_epoch, 'loss:', loss)
       
-  
   
 def test(model, X_test, y_test, config):
   """
@@ -253,7 +252,7 @@ def test(model, X_test, y_test, config):
   targets = y_test.nonzero()[1]
   accuracy = (predictions == targets).sum()/len(targets)
   return accuracy
-      
+
 
 if __name__ == "__main__":
   train_data_fname = 'data/MNIST_train.pkl'
