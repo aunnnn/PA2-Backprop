@@ -197,7 +197,7 @@ class Neuralnetwork():
     '''
     find cross entropy loss between logits and targets
     '''
-    output = (targets * np.log(logits)).sum()/len(targets)
+    output = -(targets * np.log(logits)).sum()/len(targets)
     return output
     
   def backward_pass(self):
