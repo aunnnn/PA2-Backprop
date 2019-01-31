@@ -5,21 +5,21 @@ from tqdm import tqdm_notebook as tqdm
 config = {}
 config['layer_specs'] = [784, 100, 100, 10]  # The length of list denotes number of hidden layers; each element denotes number of neurons in that layer; first element is the size of input layer, last element is the size of output layer.
 config['activation'] = 'sigmoid' # Takes values 'sigmoid', 'tanh' or 'ReLU'; denotes activation function for hidden layers
-config['batch_size'] = 200  # Number of training samples per batch to be passed to network
+config['batch_size'] = 500  # Number of training samples per batch to be passed to network
 config['epochs'] = 50  # Number of epochs to train the model
 config['early_stop'] = True  # Implement early stopping or not
 config['early_stop_epoch'] = 5  # Number of epochs for which validation loss increases to be counted as overfitting
 config['L2_penalty'] = 0  # Regularization constant
 config['momentum'] = True  # Denotes if momentum is to be applied or not
 config['momentum_gamma'] = 0.9  # Denotes the constant 'gamma' in momentum expression
-config['learning_rate'] = 0.006 # Learning rate of gradient descent algorithm
+config['learning_rate'] = 0.007 # Learning rate of gradient descent algorithm
 
 def softmax(x):
   """
   Write the code for softmax activation function that takes in a numpy array and returns a numpy array.
   """
   out_exp = np.exp(x)
-  sum_out_exp = np.exp(x).sum(axis=1)  
+  sum_out_exp = out_exp.sum(axis=1)  
   output = out_exp/sum_out_exp[:,None]  
   return output
 
@@ -225,47 +225,95 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
 
   EPOCHS_THRESHOLD = config['early_stop_epoch']
 
-  GAMMA = 1
-  if config['momentum']:
+  USE_MOMENTUM = config['momentum']
+  USE_EARLY_STOP = config['early_stop']
+  
+  GAMMA = 0
+  if USE_MOMENTUM:
     GAMMA = config['momentum_gamma']
   
-  print("N Batches: ",N_BATCHES, "Batch size", BATCH_SIZE)
+  print("N Epoches:", N_EPOCHS, "N Batches:",N_BATCHES, "Batch size:", BATCH_SIZE, "MOMENTUM?", USE_MOMENTUM)
 
   best_weight_layers = []
   min_loss = float('inf')
   prev_loss = float('inf')
   consecutive_epochs = 0
   
+  train_losses = []
+  valid_losses = []
+  train_accuracies = []
+  valid_accuracies = []
+  
   for i_epoch in tqdm(range(N_EPOCHS)):
+    
+    def get_shuffle_inds():
+      shuffled_inds = np.arange(len(X_train))
+      np.random.shuffle(shuffled_inds)
+      return shuffled_inds
+    
+    shuffled_inds = get_shuffle_inds()
+        
+    
+    velocities_w = {l: np.zeros_like(l.w) for l in model.layers if type(l) is Layer}
+    velocities_b = {l: np.zeros_like(l.b) for l in model.layers if type(l) is Layer}
+    
     for i_minibatch in range(0, len(X_train), BATCH_SIZE):
-      X_batch = X_train[i_minibatch:i_minibatch + BATCH_SIZE]
-      y_batch = y_train[i_minibatch:i_minibatch + BATCH_SIZE]
+      X_batch = X_train[shuffled_inds][i_minibatch:i_minibatch + BATCH_SIZE]
+      y_batch = y_train[shuffled_inds][i_minibatch:i_minibatch + BATCH_SIZE]
       
-      loss, y = model.forward_pass(X_batch, y_batch)
+      loss, _ = model.forward_pass(X_batch, y_batch)
       delta = model.backward_pass()
             
       # Weight updates
       for l in model.layers:
         if type(l) is Layer:
-          l.w += GAMMA*LEARNING_RATE * l.d_w
-          l.b += GAMMA*LEARNING_RATE * l.d_b
+          
+          prev_vw = velocities_w[l]
+          current_vw = GAMMA*prev_vw + LEARNING_RATE * l.d_w
+          
+          prev_vb = velocities_b[l]
+          current_vb = GAMMA*prev_vb + LEARNING_RATE * l.d_b
+          
+          l.w += current_vw
+          l.b += current_vb
 
-    print('Epoch:', i_epoch, 'loss:', loss)
+    # RECORD FOR REPORT
+    loss_train = model.forward_pass(X_train, y_train)
+    loss_valid, _ = model.forward_pass(X_valid, y_valid)    
+    print('Epoch:', i_epoch, 'loss train:', loss_valid, 'loss validate:', loss_valid)
+        
+    train_losses.append(loss_train)
+    valid_losses.append(loss_valid)
     
-    if config['early_stop']:
-      loss_valid, _ = model.forward_pass(X_valid, y_valid)
+    accuracy_train = test(model, X_train, y_train, config)
+    accuracy_valid = test(model, X_valid, y_valid, config)
+    
+    train_accuracies.append(accuracy_train)
+    valid_accuracies.append(accuracy_valid)
+    
+    if USE_EARLY_STOP:      
       if loss_valid < min_loss:
         min_loss = loss_valid
         best_weight_layers = model.layers
+      
       if loss_valid > prev_loss:
         consecutive_epochs += 1
-      if consecutive_epochs == EPOCHS_THRESHOLD:
-        model.layers = best_weight_layers
-        print('Stop training as validation loss increases for {} epochs'.format(EPOCHS_THRESHOLD))
-        break
-      else:
-        prev_loss = loss_valid
-
+        if consecutive_epochs == EPOCHS_THRESHOLD:
+          model.layers = best_weight_layers
+          print('Stop training as validation loss increases for {} epochs'.format(EPOCHS_THRESHOLD))
+          break
+      else: 
+        consecutive_epochs = 0
+      
+      prev_loss = loss_valid
+  return {
+    'config': config,
+    'train_losses': train_losses, 
+    'valid_losses': valid_losses, 
+    'train_accuracies': train_accuracies, 
+    'valid_accuracies': valid_accuracies
+  }
+        
       
   
 def test(model, X_test, y_test, config):
@@ -278,8 +326,7 @@ def test(model, X_test, y_test, config):
   # convert y_test from one-hot to actual target inds
   targets = y_test.nonzero()[1]
   accuracy = (predictions == targets).sum()/len(targets)
-  return accuracy
-
+  return accuracy÷
 
 if __name__ == "__main__":
   train_data_fname = 'data/MNIST_train.pkl'
@@ -293,3 +340,4 @@ if __name__ == "__main__":
   X_test, y_test = load_data(test_data_fname)
   trainer(model, X_train, y_train, X_valid, y_valid, config)
   test_acc = test(model, X_test, y_test, config)
+  print("Test Accuracy:", test_acc)
