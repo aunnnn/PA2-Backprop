@@ -10,9 +10,9 @@ config['epochs'] = 50  # Number of epochs to train the model
 config['early_stop'] = True  # Implement early stopping or not
 config['early_stop_epoch'] = 5  # Number of epochs for which validation loss increases to be counted as overfitting
 config['L2_penalty'] = 0  # Regularization constant
-config['momentum'] = False  # Denotes if momentum is to be applied or not
+config['momentum'] = True  # Denotes if momentum is to be applied or not
 config['momentum_gamma'] = 0.9  # Denotes the constant 'gamma' in momentum expression
-config['learning_rate'] = 0.001 # Learning rate of gradient descent algorithm
+config['learning_rate'] = 0.006 # Learning rate of gradient descent algorithm
 
 def softmax(x):
   """
@@ -222,8 +222,19 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
   LEARNING_RATE = config['learning_rate']
   
   N_BATCHES = len(X_train) // BATCH_SIZE
+
+  EPOCHS_THRESHOLD = config['early_stop_epoch']
+
+  GAMMA = 1
+  if config['momentum']:
+    GAMMA = config['momentum_gamma']
   
   print("N Batches: ",N_BATCHES, "Batch size", BATCH_SIZE)
+
+  best_weight_layers = []
+  min_loss = float('inf')
+  prev_loss = float('inf')
+  consecutive_epochs = 0
   
   for i_epoch in tqdm(range(N_EPOCHS)):
     for i_minibatch in range(0, len(X_train), BATCH_SIZE):
@@ -236,10 +247,25 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
       # Weight updates
       for l in model.layers:
         if type(l) is Layer:
-          l.w += LEARNING_RATE * l.d_w
-          l.b += LEARNING_RATE * l.d_b
-      
+          l.w += GAMMA*LEARNING_RATE * l.d_w
+          l.b += GAMMA*LEARNING_RATE * l.d_b
+
     print('Epoch:', i_epoch, 'loss:', loss)
+    
+    if config['early_stop']:
+      loss_valid, _ = model.forward_pass(X_valid, y_valid)
+      if loss_valid < min_loss:
+        min_loss = loss_valid
+        best_weight_layers = model.layers
+      if loss_valid > prev_loss:
+        consecutive_epochs += 1
+      if consecutive_epochs == EPOCHS_THRESHOLD:
+        model.layers = best_weight_layers
+        print('Stop training as validation loss increases for {} epochs'.format(EPOCHS_THRESHOLD))
+        break
+      else:
+        prev_loss = loss_valid
+
       
   
 def test(model, X_test, y_test, config):
