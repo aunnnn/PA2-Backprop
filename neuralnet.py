@@ -3,8 +3,8 @@ import pickle
 from tqdm import tqdm_notebook as tqdm
 
 config = {}
-config['layer_specs'] = [784, 100, 100, 10]  # The length of list denotes number of hidden layers; each element denotes number of neurons in that layer; first element is the size of input layer, last element is the size of output layer.
-config['activation'] = 'sigmoid' # Takes values 'sigmoid', 'tanh' or 'ReLU'; denotes activation function for hidden layers
+config['layer_specs'] = [784, 50, 10]  # The length of list denotes number of hidden layers; each element denotes number of neurons in that layer; first element is the size of input layer, last element is the size of output layer.
+config['activation'] = 'tanh' # Takes values 'sigmoid', 'tanh' or 'ReLU'; denotes activation function for hidden layers
 config['batch_size'] = 500  # Number of training samples per batch to be passed to network
 config['epochs'] = 50  # Number of epochs to train the model
 config['early_stop'] = True  # Implement early stopping or not
@@ -12,7 +12,7 @@ config['early_stop_epoch'] = 5  # Number of epochs for which validation loss inc
 config['L2_penalty'] = 0  # Regularization constant
 config['momentum'] = True  # Denotes if momentum is to be applied or not
 config['momentum_gamma'] = 0.9  # Denotes the constant 'gamma' in momentum expression
-config['learning_rate'] = 0.007 # Learning rate of gradient descent algorithm
+config['learning_rate'] = 0.0007 # Learning rate of gradient descent algorithm
 
 def softmax(x):
   """
@@ -146,7 +146,19 @@ class Layer():
     """
 
     # This is dE/dw = delta received . dx/dw
-    self.d_w = (np.swapaxes(self.x.T[:,:,np.newaxis],1,2) * np.swapaxes(delta[:,:,np.newaxis], 0, 2)).sum(axis=2)
+    
+    def harmadards_sum(X, Y):
+      """
+        X is [n, dim_x] 
+        Y is [n, dim_y]
+        Return the sum of all harmadard products between each vector x and y at index i to n
+      """
+      ans = np.zeros((X.shape[1], Y.shape[1]))
+      for i in range(len(X)):
+        ans += (X[i][:,None] * Y[i])
+      return ans
+    
+    self.d_w = harmadards_sum(self.x, delta)
 
     # This is dE/db = delta received . 1
     self.d_b = delta.sum(axis=0)
@@ -232,7 +244,18 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
   if USE_MOMENTUM:
     GAMMA = config['momentum_gamma']
   
-  print("N Epoches:", N_EPOCHS, "N Batches:",N_BATCHES, "Batch size:", BATCH_SIZE, "MOMENTUM?", USE_MOMENTUM)
+  ACTIVATION = config['activation']
+  
+  print("-------",
+        "Model Config:",
+        "\nActivation:", ACTIVATION, 
+        "\nN Epoches:", N_EPOCHS, 
+        "\nN Batches:",N_BATCHES, 
+        "\nBatch size:", BATCH_SIZE, 
+        "\nLearning rate:", LEARNING_RATE,
+        "\nMomentum?", USE_MOMENTUM)
+  if USE_MOMENTUM:
+    print('Gamma:', GAMMA)
 
   best_weight_layers = []
   min_loss = float('inf')
@@ -274,13 +297,16 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
           prev_vb = velocities_b[l]
           current_vb = GAMMA*prev_vb + LEARNING_RATE * l.d_b
           
+          velocities_w[l] = current_vw
+          velocities_b[l] = current_vb
+          
           l.w += current_vw
           l.b += current_vb
 
     # RECORD FOR REPORT
-    loss_train = model.forward_pass(X_train, y_train)
+    loss_train, _ = model.forward_pass(X_train, y_train)
     loss_valid, _ = model.forward_pass(X_valid, y_valid)    
-    print('Epoch:', i_epoch, 'loss train:', loss_valid, 'loss validate:', loss_valid)
+    print('Epoch:', i_epoch, 'loss train:', loss_train, 'loss validate:', loss_valid)
         
     train_losses.append(loss_train)
     valid_losses.append(loss_valid)
@@ -307,7 +333,6 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
       
       prev_loss = loss_valid
   return {
-    'config': config,
     'train_losses': train_losses, 
     'valid_losses': valid_losses, 
     'train_accuracies': train_accuracies, 
@@ -326,7 +351,7 @@ def test(model, X_test, y_test, config):
   # convert y_test from one-hot to actual target inds
   targets = y_test.nonzero()[1]
   accuracy = (predictions == targets).sum()/len(targets)
-  return accuracy÷
+  return accuracy
 
 if __name__ == "__main__":
   train_data_fname = 'data/MNIST_train.pkl'
