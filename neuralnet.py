@@ -240,6 +240,8 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
   USE_MOMENTUM = config['momentum']
   USE_EARLY_STOP = config['early_stop']
   
+  L2_lambda = config['L2_penalty']
+  
   GAMMA = 0
   if USE_MOMENTUM:
     GAMMA = config['momentum_gamma']
@@ -253,6 +255,7 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
         "\nN Batches:",N_BATCHES, 
         "\nBatch size:", BATCH_SIZE, 
         "\nLearning rate:", LEARNING_RATE,
+        "\nL2 lambda:", L2_lambda,
         "\nMomentum?", USE_MOMENTUM)
   if USE_MOMENTUM:
     print('Gamma:', GAMMA)
@@ -274,15 +277,15 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
       np.random.shuffle(shuffled_inds)
       return shuffled_inds
     
-    shuffled_inds = get_shuffle_inds()
-        
+    shuffled_inds = get_shuffle_inds()        
     
     velocities_w = {l: np.zeros_like(l.w) for l in model.layers if type(l) is Layer}
     velocities_b = {l: np.zeros_like(l.b) for l in model.layers if type(l) is Layer}
     
     for i_minibatch in range(0, len(X_train), BATCH_SIZE):
-      X_batch = X_train[shuffled_inds][i_minibatch:i_minibatch + BATCH_SIZE]
-      y_batch = y_train[shuffled_inds][i_minibatch:i_minibatch + BATCH_SIZE]
+      inds_batch = shuffled_inds[i_minibatch:i_minibatch + BATCH_SIZE]
+      X_batch = X_train[inds_batch]
+      y_batch = y_train[inds_batch]
       
       loss, _ = model.forward_pass(X_batch, y_batch)
       delta = model.backward_pass()
@@ -291,22 +294,39 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
       for l in model.layers:
         if type(l) is Layer:
           
+          # To prevent confusion on sign when
+          # combining with momentum/regularization
+          # ------------------------------------
+          
+          # l.d_w and d_b is actually delta
+          delta_w = l.d_w
+          delta_b = l.d_b
+          
+          # To get gradient of loss E to w, negate it
+          
+          # Complete gradient of loss E with L2 Reg
+          # No reg for bias
+          dE_dw = (-delta_w + L2_lambda*l.w) / len(X_batch)
+          dE_db = -delta_b / len(X_batch)
+          
+          # Apply Momentum
           prev_vw = velocities_w[l]
-          current_vw = GAMMA*prev_vw + LEARNING_RATE * l.d_w
+          current_vw = GAMMA*prev_vw + LEARNING_RATE * dE_dw
           
           prev_vb = velocities_b[l]
-          current_vb = GAMMA*prev_vb + LEARNING_RATE * l.d_b
+          current_vb = GAMMA*prev_vb + LEARNING_RATE * dE_db
           
+          # Update weights
+          l.w -= current_vw
+          l.b -= current_vb
+          
+          # Save velocities
           velocities_w[l] = current_vw
           velocities_b[l] = current_vb
-          
-          l.w += current_vw
-          l.b += current_vb
 
     # RECORD FOR REPORT
     loss_train, _ = model.forward_pass(X_train, y_train)
     loss_valid, _ = model.forward_pass(X_valid, y_valid)    
-    print('Epoch:', i_epoch, 'loss train:', loss_train, 'loss validate:', loss_valid)
         
     train_losses.append(loss_train)
     valid_losses.append(loss_valid)
@@ -316,6 +336,12 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
     
     train_accuracies.append(accuracy_train)
     valid_accuracies.append(accuracy_valid)
+    
+    print('Epoch:', i_epoch, 
+          'loss train:', loss_train, 
+          'loss validate:', loss_valid, 
+          "Acc train:", accuracy_train,
+         'Acc validate:', accuracy_valid)
     
     if USE_EARLY_STOP:      
       if loss_valid < min_loss:
