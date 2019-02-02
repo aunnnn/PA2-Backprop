@@ -337,11 +337,8 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
     train_accuracies.append(accuracy_train)
     valid_accuracies.append(accuracy_valid)
     
-    print('Epoch:', i_epoch, 
-          'loss train:', loss_train, 
-          'loss validate:', loss_valid, 
-          "Acc train:", accuracy_train,
-         'Acc validate:', accuracy_valid)
+    print('Epoch {} - loss train: {:4f} loss validation: {:4f} accuracy train: {:4f} accuracy validation: {:4f}'
+           .format(i_epoch, loss_train, loss_valid, accuracy_train, accuracy_valid))
     
     if USE_EARLY_STOP:      
       if loss_valid < min_loss:
