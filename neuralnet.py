@@ -223,7 +223,7 @@ class Neuralnetwork():
       delta = layer.backward_pass(delta)
     return delta
 
-def trainer(model, X_train, y_train, X_valid, y_valid, config):
+def trainer(model, X_train, y_train, X_valid, y_valid, config, verbose=True):
   """
   Write the code to train the network. Use values from config to set parameters
   such as L2 penalty, number of epochs, momentum, etc.
@@ -336,12 +336,10 @@ def trainer(model, X_train, y_train, X_valid, y_valid, config):
     
     train_accuracies.append(accuracy_train)
     valid_accuracies.append(accuracy_valid)
-    
-    print('Epoch:', i_epoch, 
-          'loss train:', loss_train, 
-          'loss validate:', loss_valid, 
-          "Acc train:", accuracy_train,
-         'Acc validate:', accuracy_valid)
+
+    if verbose:
+      print('Epoch {} - loss train: {:4f} loss validation: {:4f} accuracy train: {:4f} accuracy validation: {:4f}'
+           .format(i_epoch, loss_train, loss_valid, accuracy_train, accuracy_valid))
     
     if USE_EARLY_STOP:      
       if loss_valid < min_loss:
